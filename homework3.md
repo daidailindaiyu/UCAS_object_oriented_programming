@@ -306,3 +306,8 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator {
 CompositeByteBuf可以让我们把多个ByteBuf当成一个大Buf来处理，ByteBufAllocator提供了compositeBuffer()工厂方法来创建CompositeByteBuf。CompositeByteBuf的实现使用了组合模式，如下图所示：</p>
 ![节点](./jd12.jpg)</p>
 示意图引自https://blog.csdn.net/zxhoo/article/details/17577865
+
+
+# 四、总结
+面向对象的编程思想是适用于多人维护，周期较长的大型项目的。我们现在即使理解了所有面向对象思想和编程方法，也比较难自发的把它们使用到日常的编程过程中。
+可能只有真正参与了大型项目，体会到面向对象的方法对于代码鲁棒性，可读性，可用性的提升才能够真正学会变相对象。
