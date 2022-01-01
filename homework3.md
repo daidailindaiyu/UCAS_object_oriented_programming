@@ -181,12 +181,18 @@ public final class Unpooled {
 ...
 }
 ```
-而后在UnpooledByteBufAllocator中多个构造方法之间多次调用，最后调用了如下构造方法
+而后在UnpooledByteBufAllocator中多个构造方法之间多次调用，最后调用了super(preferDirect)也就是AbstractByteBufAllocator(preferDirect)来初始化buffer。
 ```java
 public final class UnpooledByteBufAllocator extends AbstractByteBufAllocator implements ByteBufAllocatorMetricProvider {
     public static final UnpooledByteBufAllocator DEFAULT =
             new UnpooledByteBufAllocator(PlatformDependent.directBufferPreferred());
 ...
+    public UnpooledByteBufAllocator(boolean preferDirect) {
+        this(preferDirect, false);
+    }
+    public UnpooledByteBufAllocator(boolean preferDirect, boolean disableLeakDetector) {
+        this(preferDirect, disableLeakDetector, PlatformDependent.useDirectBufferNoCleaner());
+    }
     public UnpooledByteBufAllocator(boolean preferDirect, boolean disableLeakDetector, boolean tryNoCleaner) {
         super(preferDirect);
         this.disableLeakDetector = disableLeakDetector;
@@ -202,7 +208,22 @@ public final class UnpooledByteBufAllocator extends AbstractByteBufAllocator imp
 ...
 }
 ```
-最后是调用的PlatformDependent.directBufferPreferred()，其具体实现如下。
+AbstractByteBufAllocator(preferDirect)的代码如下:
+```java
+    protected AbstractByteBufAllocator(boolean preferDirect) {
+        directByDefault = preferDirect && PlatformDependent.hasUnsafe();
+        emptyBuf = new EmptyByteBuf(this);
+    }
+```
+最终调用了java工具库中的objectutil和strutil来进行分配，这之后的过程就超出了我们源码分析的范畴.
+```java
+    private EmptyByteBuf(ByteBufAllocator alloc, ByteOrder order) {
+        this.alloc = ObjectUtil.checkNotNull(alloc, "alloc");
+        this.order = order;
+        str = StringUtil.simpleClassName(this) + (order == ByteOrder.BIG_ENDIAN? "BE" : "LE");
+    }
+```
+还有值得说明的在构造方法中多次调用的PlatformDependent.directBufferPreferred()，其具体实现如下。可以看到，它会判断当前平台是否支持使用Java的unsafe。
 ```java
 private static final Throwable UNSAFE_UNAVAILABILITY_CAUSE = unsafeUnavailabilityCause0();
 private static final boolean DIRECT_BUFFER_PREFERRED =
