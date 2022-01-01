@@ -168,6 +168,68 @@ csc
 3
 3
 ```
+下面我们就跟随这个使用实例看一看都涉及到了buffer的哪些类：
+首先Unpooled的buffer方法会调用UnpooledByteBufAllocator.DEFAULT的heapBuffer方法
+```java
+public final class Unpooled {
+
+    private static final ByteBufAllocator ALLOC = UnpooledByteBufAllocator.DEFAULT;
+...
+    public static ByteBuf buffer() {
+        return ALLOC.heapBuffer();
+    }
+...
+}
+```
+而后在UnpooledByteBufAllocator中多个构造方法之间多次调用，最后调用了如下构造方法
+```java
+public final class UnpooledByteBufAllocator extends AbstractByteBufAllocator implements ByteBufAllocatorMetricProvider {
+    public static final UnpooledByteBufAllocator DEFAULT =
+            new UnpooledByteBufAllocator(PlatformDependent.directBufferPreferred());
+...
+    public UnpooledByteBufAllocator(boolean preferDirect, boolean disableLeakDetector, boolean tryNoCleaner) {
+        super(preferDirect);
+        this.disableLeakDetector = disableLeakDetector;
+        noCleaner = tryNoCleaner && PlatformDependent.hasUnsafe()
+                && PlatformDependent.hasDirectBufferNoCleanerConstructor();
+    }
+...
+    protected ByteBuf newHeapBuffer(int initialCapacity, int maxCapacity) {
+        return PlatformDependent.hasUnsafe() ?
+                new InstrumentedUnpooledUnsafeHeapByteBuf(this, initialCapacity, maxCapacity) :
+                new InstrumentedUnpooledHeapByteBuf(this, initialCapacity, maxCapacity);
+    }
+...
+}
+```
+最后是调用的PlatformDependent.directBufferPreferred()，其具体实现如下。
+```java
+private static final Throwable UNSAFE_UNAVAILABILITY_CAUSE = unsafeUnavailabilityCause0();
+private static final boolean DIRECT_BUFFER_PREFERRED =
+        UNSAFE_UNAVAILABILITY_CAUSE == null && !SystemPropertyUtil.getBoolean("io.netty.noPreferDirect", false);
+ 
+//unsafeUnavailabilityCause0的实现：判断当前平台是否支持使用Java的unsafe
+private static Throwable unsafeUnavailabilityCause0() {
+    if (isAndroid()) {
+        logger.debug("sun.misc.Unsafe: unavailable (Android)");
+        return new UnsupportedOperationException("sun.misc.Unsafe: unavailable (Android)");
+    }
+    Throwable cause = PlatformDependent0.getUnsafeUnavailabilityCause();
+    if (cause != null) {
+        return cause;
+    }
+ 
+    try {
+        boolean hasUnsafe = PlatformDependent0.hasUnsafe();
+        logger.debug("sun.misc.Unsafe: {}", hasUnsafe ? "available" : "unavailable");
+        return hasUnsafe ? null : PlatformDependent0.getUnsafeUnavailabilityCause();
+    } catch (Throwable t) {
+        logger.trace("Could not determine if Unsafe is available", t);
+        // Probably failed to initialize PlatformDependent0.
+        return new UnsupportedOperationException("Could not determine if Unsafe is available", t);
+    }
+}
+```
 ## ByteBuf所包含的类：
 ![节点](./jd7.jpg)
 
@@ -236,6 +298,16 @@ ByteBuf 与JDK中的 ByteBuffer 的最大区别之一就是：
 
 # 二、核心设计流程分析
 在这一部分中，我们具体分析ByteBuf所涉及到的所有类和它们的类间关系。
+
+buffer的写操作：
+```java
+ public ByteBuf writeBytes(byte[] src, int srcIndex, int length) {
+     ensureWritable(length);
+     setBytes(writerIndex, src, srcIndex, length);
+     writerIndex += length;
+     return this;
+ }
+```
 
 ## 1.类间关系
 * ByteBuf是入口类，它提供了大量的静态方法，如capacity，alloc，order等等，是入口类。
